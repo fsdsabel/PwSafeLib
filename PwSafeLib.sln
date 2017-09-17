@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26730.8
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PwSafeLib", "PwSafeLib\PwSafeLib.csproj", "{FA0078F3-8A44-4B8E-9A47-17BFB382D25D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PwSafeLib.Tests", "PwSafeLib.Tests\PwSafeLib.Tests.csproj", "{4C6A6B45-4F44-476C-84CD-24038D77C6BA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FA0078F3-8A44-4B8E-9A47-17BFB382D25D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FA0078F3-8A44-4B8E-9A47-17BFB382D25D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FA0078F3-8A44-4B8E-9A47-17BFB382D25D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FA0078F3-8A44-4B8E-9A47-17BFB382D25D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4C6A6B45-4F44-476C-84CD-24038D77C6BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4C6A6B45-4F44-476C-84CD-24038D77C6BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4C6A6B45-4F44-476C-84CD-24038D77C6BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4C6A6B45-4F44-476C-84CD-24038D77C6BA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {EE622CC0-1CFD-4CA4-9A57-4F6957144113}
+	EndGlobalSection
+EndGlobal
