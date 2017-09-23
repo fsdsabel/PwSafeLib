@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -9,6 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using PwSafeLib.Crypto;
 using PwSafeLib.Helper;
+using PwSafeLib.Passwords;
 
 namespace PwSafeLib.Filesystem
 {
@@ -69,6 +72,9 @@ namespace PwSafeLib.Filesystem
         private readonly SecureString _passkey;
         private HMACSHA256 _hmac;
         private uint _numHashIters;
+        private readonly List<UnknownFieldEntry> _unknownFields = new List<UnknownFieldEntry>();
+        
+
 
         /// <summary>
         /// Create a new password safe instance.
@@ -218,9 +224,60 @@ namespace PwSafeLib.Filesystem
                 await WriteUtf8CbcAsync(PwsFileFieldType.DbName, Header.DbName);
             if (!string.IsNullOrEmpty(Header.DbDescription))
                 await WriteUtf8CbcAsync(PwsFileFieldType.DbDesc, Header.DbDescription);
+            
+            
             // TODO: more stuff?
+            if (PasswordPolicies.Count > 0)
+            {
+                // Do not exceed 2 hex character length field
+                var num = Math.Min(PasswordPolicies.Count, 255);
+                var iter = PasswordPolicies.GetEnumerator();
+                iter.MoveNext();
+
+                var oss = new StringBuilder();
+
+                void WriteHex(int value)
+                {
+                    oss.AppendFormat("{0:x2}", (ushort) value);
+                }
+
+                WriteHex(num);
+                for (int n = 0; n < num; n++, iter.MoveNext())
+                {
+                    // The Policy name is limited to 255 characters.
+                    // This should have been prevented by the GUI.
+                    // If not, don't write it out as it may cause issues
+                    if (iter.Current.Key.Length > 255)
+                    {
+                        continue;
+                    }
+                    WriteHex(iter.Current.Key.Length);
+                    oss.Append(iter.Current.Key);
+                    oss.Append(iter.Current.Value);
+
+                    if (iter.Current.Value.Symbols.Length == 0)
+                    {
+                        oss.Append("00");
+                    }
+                    else
+                    {
+                        WriteHex(iter.Current.Value.Symbols.Length);
+                        oss.Append(iter.Current.Value.Symbols);
+                    }
+                }
+
+                iter.Dispose();
+                await WriteUtf8CbcAsync(PwsFileFieldType.PasswordPolicies, oss.ToString());
+            }
+
+
             foreach (var group in EmptyGroups)
                 await WriteUtf8CbcAsync(PwsFileFieldType.EmptyGroup, group);
+
+            foreach (var ufe in _unknownFields)
+            {
+                await WriteCbcAsync(ufe.Type, ufe.Data, ufe.Data.Length);
+            }
 
             // Write zero-length end-of-record type item
             await WriteCbcAsync(PwsFileFieldType.End, new byte[0], 0);
@@ -354,6 +411,79 @@ namespace PwSafeLib.Filesystem
                         case PwsFileFieldType.DbDesc:
                             Header.DbDescription = Encoding.UTF8.GetString(record.Buffer);
                             break;
+                        case PwsFileFieldType.PasswordPolicies:
+                            /**
+                             * Very sad situation here: this field code was also assigned to
+                             * YUBI_SK in 3.27Y. Here we try to infer the actual type based
+                             * on the actual value stored in the field.
+                             * Specifically, YUBI_SK is YUBI_SK_LEN bytes of binary data, whereas
+                             * HDR_PSWDPOLICIES is of varying length, starting with at least 4 hex
+                             * digits.
+                             */
+                            if (record.Buffer.Length != PwsFileHeader.YubiSkLength ||
+                                (record.Buffer.Length >= 4 &&
+                                 IsXDigit(record.Buffer[0]) && IsXDigit(record.Buffer[1]) &&
+                                 IsXDigit(record.Buffer[2]) && IsXDigit(record.Buffer[3])))
+                            {
+                                var text = Encoding.UTF8.GetString(record.Buffer);
+                                // Get number of polices
+                                var sxBlank = " "; // Needed in case hex value is all zeroes!
+                                var sxTemp = text.Substring(0, 2) + sxBlank; 
+                                var j = 2;
+                                var num = int.Parse(sxTemp, NumberStyles.AllowHexSpecifier | NumberStyles.AllowTrailingWhite);
+                                for (int n = 0; n < num; n++)
+                                {
+                                    if (j > text.Length)
+                                    {
+                                        break; // Error
+                                    }
+
+                                    sxTemp = text.Substring(j, 2) + sxBlank;
+                                    j += 2; // Skip over name length
+
+                                    var namelength = int.Parse(sxTemp,
+                                        NumberStyles.AllowHexSpecifier | NumberStyles.AllowTrailingWhite);
+
+                                    if (j + namelength > text.Length) {
+                                        break;  // Error
+                                    }
+
+                                    var sxPolicyName = text.Substring(j, namelength);
+                                    j += namelength; // Skip over name
+                                    if (j + 19 > text.Length)
+                                    {
+                                        break; // Error
+                                    }
+
+                                    var pwp = new PwPolicy(text.Substring(j, 19));
+                                    j += 19; // Skip over pwp
+
+                                    if (j + 2 > text.Length)
+                                    {
+                                        break; // Error
+                                    }
+
+                                    sxTemp = text.Substring(j, 2) + sxBlank;
+                                    j += 2; // Skip over symbollength
+                                    var symbollength = int.Parse(sxTemp,
+                                        NumberStyles.AllowHexSpecifier | NumberStyles.AllowTrailingWhite);
+
+
+                                    if (symbollength != 0)
+                                    {
+                                        if (j + symbollength > text.Length)
+                                        {
+                                            break; // Error
+                                        }
+                                        pwp.Symbols = text.Substring(j, symbollength);
+                                        j += symbollength; // Skip over symbols
+                                    }
+
+                                    PasswordPolicies[sxPolicyName] = pwp;
+                                }
+                            }
+
+                            break;
                         case PwsFileFieldType.EmptyGroup:
                             EmptyGroups.Add(Encoding.UTF8.GetString(record.Buffer));
                             break;
@@ -361,11 +491,21 @@ namespace PwSafeLib.Filesystem
                             break;
                         // TODO: some other fields that might be useful (password policies)
                         default:
+                            // Save unknown fields that may be addded by future versions
+                            var ufe = new UnknownFieldEntry((PwsFileFieldType)record.Type, record.Buffer);
+                            _unknownFields.Add(ufe);
                             break;
                     }
                 } while ((PwsFileFieldType) record.Type != PwsFileFieldType.End);
                 EmptyGroups.Sort();
             }
+        }
+
+        private static bool IsXDigit(byte digit)
+        {
+            return (digit >= (byte) '0' && digit <= (byte) '9') ||
+                   (digit >= (byte) 'a' && digit <= (byte) 'f') ||
+                   (digit >= (byte) 'A' && digit <= (byte) 'F');
         }
 
         private async Task<PwHashInfo> CheckPasskeyAsync()
@@ -567,6 +707,18 @@ namespace PwSafeLib.Filesystem
             public byte[] Hash { get; set; }
         }
 
+        private class UnknownFieldEntry
+        {
+            public UnknownFieldEntry(PwsFileFieldType type, byte[] data)
+            {
+                Type = type;
+                Data = data;
+            }
+
+            public PwsFileFieldType Type { get;  }
+            public byte[] Data { get; }
+        }
+
 
         private enum PwsFileFieldType
         {
@@ -598,6 +750,7 @@ namespace PwSafeLib.Filesystem
             LastUpdateHost = 8,
             DbName = 9,
             DbDesc = 10,
+            PasswordPolicies = 16,
             EmptyGroup = 17,
             End = 255
         }

@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using PwSafeLib.Crypto;
 using PwSafeLib.Helper;
+using PwSafeLib.Passwords;
 
 namespace PwSafeLib.Filesystem
 {
@@ -49,6 +50,11 @@ namespace PwSafeLib.Filesystem
         /// File Header of the current password safe.
         /// </summary>
         public PwsFileHeader Header { get; set; } = new PwsFileHeader();
+
+        /// <summary>
+        /// Password policies stored in the current safe.
+        /// </summary>
+        public Dictionary<string, PwPolicy> PasswordPolicies { get; } = new Dictionary<string, PwPolicy>();
 
         /// <summary>
         /// Sets the application name, that is written to every password safe file.

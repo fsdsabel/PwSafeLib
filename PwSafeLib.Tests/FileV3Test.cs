@@ -5,6 +5,7 @@ using System.Security;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using PwSafeLib.Filesystem;
+using PwSafeLib.Passwords;
 
 namespace PwSafeLib.Tests
 {
@@ -198,6 +199,47 @@ namespace PwSafeLib.Tests
             Assert.AreEqual(d1, item);
             Assert.IsNull(await read.ReadRecordAsync());
             read.Dispose();
+        }
+
+        [TestMethod]
+        public async Task PwsFileV3_PwPolicy_IsPersisted()
+        {
+            var ms = new MemoryStream();
+            var pws = new PwsFileV3(ms, CreatePasskey(), FileMode.Create);
+            pws.PasswordPolicies["Test"] = new PwPolicy
+            {
+                Flags = PwPolicyFlags.UseEasyVision | PwPolicyFlags.UseSymbols,
+                Length = 10,
+                DigitMinLength = 1,
+                LowerMinLength = 2,
+                SymbolMinLength = 3,
+                UpperMinLength = 4,
+                Symbols = "{}"
+            };
+            await pws.OpenAsync();
+            
+            pws.Dispose();
+
+            ms.Position = 0;
+            var read = (PwsFileV3)await PwsFile.OpenAsync(ms, CreatePasskey());
+
+            Assert.AreEqual(1, read.PasswordPolicies.Count);
+            var pwp = read.PasswordPolicies["Test"];
+            Assert.AreEqual(PwPolicyFlags.UseEasyVision | PwPolicyFlags.UseSymbols, pwp.Flags);
+            Assert.AreEqual(10, pwp.Length);
+            Assert.AreEqual(1, pwp.DigitMinLength);
+            Assert.AreEqual(2, pwp.LowerMinLength);
+            Assert.AreEqual(3, pwp.SymbolMinLength);
+            Assert.AreEqual(4, pwp.UpperMinLength);
+            Assert.AreEqual("{}", pwp.Symbols);
+
+            while (await read.ReadRecordAsync() != null)
+            {
+                // read till end, so Dispose won't throw (end record is included in hmac)
+            }
+            read.Dispose();
+            
+         
         }
     }
 }

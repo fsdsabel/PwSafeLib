@@ -51,5 +51,7 @@ namespace PwSafeLib.Filesystem
         /// A description of the safe.
         /// </summary>
         public string DbDescription { get; set; }
+
+        public const int YubiSkLength = 20;
     }
 }
